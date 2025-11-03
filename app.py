@@ -316,7 +316,7 @@ if st.session_state.data_loaded:
         if st.button("💾 Update", key=f"update_{st.session_state.current_index}"):
             # Convert grade to number if possible
             try:
-                grade_value = float(new_grade) if new_grade else None
+                grade_value = int(new_grade) if new_grade else None
             except:
                 grade_value = new_grade if new_grade else None
             
@@ -433,4 +433,5 @@ else:
     ### Requirements:
     - Each card must have exactly 2 images (front and back)
     - Each card must have a valid grade and grading company
+
     """)
