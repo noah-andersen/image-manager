@@ -33,8 +33,9 @@ streamlit run app.py
 ### 2. Load Your Dataset
 
 In the sidebar:
-- **JSON File Path**: Enter the full path to your JSON file containing the card data
-  - Example: `/Users/nandersen/git_repos/ebay-card-scraper/data_scraped/pokemon_psa10.json`
+- **Data File Path**: Enter the full path to your JSON or CSV file containing the card data
+  - JSON Example: `/Users/nandersen/git_repos/ebay-card-scraper/data_scraped/pokemon_psa10.json`
+  - CSV Example: `/Users/nandersen/git_repos/ebay-card-scraper/all_pokemon/all_pkmn_100.csv`
 - **Base Images Path**: Enter the base directory where your images are stored
   - Example: `/Users/nandersen/git_repos/ebay-card-scraper/downloaded_images/`
 - Click **Load Dataset**
@@ -77,6 +78,10 @@ output_directory/
 
 ## Data Format
 
+The application supports both JSON and CSV formats for your input data.
+
+### JSON Format
+
 Your input JSON should contain card data in this format:
 
 ```json
@@ -96,6 +101,17 @@ Your input JSON should contain card data in this format:
 ```
 
 Or an array of such objects.
+
+### CSV Format
+
+Your input CSV should have these columns (images and image_urls are comma-separated):
+
+```csv
+title,card_name,grading_company,grade,price,listing_url,listing_id,image_urls,source,scraped_date,images
+Mistys Seadra 9/132 Gym Heroes Holo Rare Pokemon Card CGC 9,Mistys Seadra 9/132 Gym Heroes Holo Rare Pokemon Card,CGC,9.0,57.0,https://www.ebay.com/itm/286872287332,286872287332,"https://i.ebayimg.com/images/g/2vMAAeSwCupo6scc/s-l1600.jpg, https://i.ebayimg.com/images/g/ja4AAeSwVsdo6scc/s-l1600.jpg",ebay,2025-10-24T07:31:56.656429,"ebay/CGC/286872287332_Mistys_Seadra_9132_Gym_Heroes_Holo_Rare_Pokemon_C_9/image_597bcc0f.jpg, ebay/CGC/286872287332_Mistys_Seadra_9132_Gym_Heroes_Holo_Rare_Pokemon_C_9/image_7b3f2d1a.jpg"
+```
+
+**Note:** In CSV format, the `images` column contains comma-separated relative paths to local image files. The application will automatically parse these paths.
 
 ## Export Rules
 

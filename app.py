@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+import csv
 import os
 from pathlib import Path
 import shutil
@@ -27,14 +28,54 @@ if 'modified_items' not in st.session_state:
 if 'deleted_items' not in st.session_state:
     st.session_state.deleted_items = set()
 
-def load_dataset(json_path, base_path):
-    """Load dataset from JSON file"""
-    with open(json_path, 'r') as f:
-        data = json.load(f)
+def load_dataset(file_path, base_path):
+    """Load dataset from JSON or CSV file"""
+    file_path = Path(file_path)
     
-    # Handle both list and single object
-    if isinstance(data, dict):
-        data = [data]
+    # Determine file type and load accordingly
+    if file_path.suffix.lower() == '.json':
+        # Load JSON format
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        
+        # Handle both list and single object
+        if isinstance(data, dict):
+            data = [data]
+    
+    elif file_path.suffix.lower() == '.csv':
+        # Load CSV format
+        data = []
+        with open(file_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Convert CSV row to expected format
+                item = {
+                    'title': row.get('title', ''),
+                    'card_name': row.get('card_name', ''),
+                    'grading_company': row.get('grading_company', ''),
+                    'grade': row.get('grade', ''),
+                    'price': row.get('price', ''),
+                    'listing_url': row.get('listing_url', ''),
+                    'listing_id': row.get('listing_id', ''),
+                    'source': row.get('source', ''),
+                    'scraped_date': row.get('scraped_date', ''),
+                }
+                
+                # Parse comma-separated image_urls
+                if 'image_urls' in row and row['image_urls']:
+                    item['image_urls'] = [url.strip() for url in row['image_urls'].split(',')]
+                else:
+                    item['image_urls'] = []
+                
+                # Parse comma-separated images (local paths)
+                if 'images' in row and row['images']:
+                    item['images'] = [img.strip() for img in row['images'].split(',')]
+                else:
+                    item['images'] = []
+                
+                data.append(item)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path.suffix}. Use .json or .csv")
     
     st.session_state.dataset = data
     st.session_state.base_path = base_path
@@ -163,13 +204,13 @@ st.sidebar.title("🃏 Dataset Manager")
 
 # Load dataset section
 st.sidebar.header("1. Load Dataset")
-json_file = st.sidebar.text_input("JSON File Path", placeholder="/path/to/data.json")
+data_file = st.sidebar.text_input("Data File Path (JSON or CSV)", placeholder="/path/to/data.json or /path/to/data.csv")
 base_path = st.sidebar.text_input("Base Images Path", placeholder="/path/to/images/")
 
 if st.sidebar.button("Load Dataset"):
-    if os.path.exists(json_file) and os.path.exists(base_path):
+    if os.path.exists(data_file) and os.path.exists(base_path):
         try:
-            load_dataset(json_file, base_path)
+            load_dataset(data_file, base_path)
             st.sidebar.success(f"Loaded {len(st.session_state.dataset)} items")
         except Exception as e:
             st.sidebar.error(f"Error loading dataset: {str(e)}")
@@ -226,6 +267,10 @@ if st.session_state.data_loaded:
                      and item.get('grading_company') 
                      and len(item.get('images', [])) == 2)
     st.sidebar.metric("Ready to Export", valid_count)
+    
+    # Info section
+    st.sidebar.header("Info")
+    st.sidebar.info("ℹ️ For export, you need exactly 2 images (front and back). First image = Front, Second image = Back")
 
 # Main content area
 if st.session_state.data_loaded:
@@ -238,30 +283,22 @@ if st.session_state.data_loaded:
     if is_deleted:
         st.error("⚠️ This listing is marked for deletion and will not be exported")
     
-    # Display title
-    st.subheader("Title")
-    st.write(current_item.get('title', 'N/A'))
-    
-    # Delete/Restore listing button
-    st.markdown("---")
-    col_del1, col_del2 = st.columns([3, 1])
-    with col_del2:
-        if is_deleted:
-            if st.button("♻️ Restore Listing", type="primary", use_container_width=True):
-                undelete_listing(st.session_state.current_index)
-                st.success("Listing restored!")
-                st.rerun()
-        else:
-            if st.button("🗑️ Mark for Deletion", type="secondary", use_container_width=True):
-                delete_listing(st.session_state.current_index)
-                st.rerun()
-    with col_del1:
-        if not is_deleted:
-            st.info("💡 Click to mark this listing for deletion (will skip during export)")
     st.markdown("---")
     
-    # Metadata editing section
-    st.subheader("Metadata")
+    # Consolidated title and info
+    st.subheader(current_item.get('title', 'N/A'))
+    
+    # Compact info display
+    info_col1, info_col2, info_col3, info_col4 = st.columns(4)
+    with info_col1:
+        st.metric("Price", f"${current_item.get('price', 0)}")
+    with info_col2:
+        st.metric("Listing ID", current_item.get('listing_id', 'N/A'))
+    with info_col3:
+        st.metric("Images", len(current_item.get('images', [])))
+    with info_col4:
+        if current_item.get('listing_url'):
+            st.markdown(f"[View Listing]({current_item['listing_url']})")
     
     # Check for missing data
     has_missing_data = not current_item.get('grade') or not current_item.get('grading_company')
@@ -323,18 +360,25 @@ if st.session_state.data_loaded:
             update_metadata(st.session_state.current_index, grade_value, new_company)
             st.rerun()
     
-    # Additional info
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Price", f"${current_item.get('price', 0):.2f}")
-    with col2:
-        st.metric("Listing ID", current_item.get('listing_id', 'N/A'))
-    with col3:
-        st.metric("Images", len(current_item.get('images', [])))
-    
-    # Image display and management
-    st.subheader("Images")
-    st.info("ℹ️ For export, you need exactly 2 images (front and back). First image = Front, Second image = Back")
+    # Action buttons above images
+    action_col1, action_col2, action_col3 = st.columns([2, 1, 1])
+    with action_col1:
+        if not is_deleted:
+            st.info("💡 Mark for deletion to skip during export")
+    with action_col2:
+        if is_deleted:
+            if st.button("♻️ Restore Listing", type="primary", use_container_width=True):
+                undelete_listing(st.session_state.current_index)
+                st.rerun()
+        else:
+            if st.button("🗑️ Mark for Deletion", type="secondary", use_container_width=True):
+                delete_listing(st.session_state.current_index)
+                st.rerun()
+    with action_col3:
+        if st.button("Next ➡️", type="primary", use_container_width=True):
+            if st.session_state.current_index < len(st.session_state.dataset) - 1:
+                st.session_state.current_index += 1
+                st.rerun()
     
     # Image reordering controls
     if len(current_item.get('images', [])) >= 2:
@@ -369,7 +413,7 @@ if st.session_state.data_loaded:
                 if os.path.exists(image_path):
                     try:
                         img = Image.open(image_path)
-                        st.image(img, caption=f"Image {idx + 1} - {'Front' if idx == 0 else 'Back' if idx == 1 else 'Extra'}", use_container_width=True)
+                        st.image(img, caption=f"Image {idx + 1} - {'Front' if idx == 0 else 'Back' if idx == 1 else 'Extra'}")
                         
                         # Delete button
                         if st.button(f"🗑️ Delete Image {idx + 1}", key=f"delete_{idx}"):
@@ -387,11 +431,6 @@ if st.session_state.data_loaded:
                 st.warning(f"⚠️ Need 2 images for export. Currently have {num_images}.")
             else:
                 st.warning(f"⚠️ Need exactly 2 images for export. Currently have {num_images}. Please delete extra images.")
-    
-    # Listing URL
-    if current_item.get('listing_url'):
-        st.subheader("Source")
-        st.markdown(f"[View Original Listing]({current_item['listing_url']})")
 
 else:
     # Welcome screen
