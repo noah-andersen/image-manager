@@ -24,7 +24,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-### 1. Start the Application
+### 1. Start the app on local host
 
 ```bash
 streamlit run app.py

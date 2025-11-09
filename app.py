@@ -77,6 +77,16 @@ def load_dataset(file_path, base_path):
     else:
         raise ValueError(f"Unsupported file format: {file_path.suffix}. Use .json or .csv")
     
+    # Filter out non-existent images from all items
+    for item in data:
+        if 'images' in item and item['images']:
+            existing_images = []
+            for img_path in item['images']:
+                full_path = os.path.join(base_path, img_path)
+                if os.path.exists(full_path):
+                    existing_images.append(img_path)
+            item['images'] = existing_images
+    
     st.session_state.dataset = data
     st.session_state.base_path = base_path
     st.session_state.data_loaded = True
@@ -87,6 +97,15 @@ def load_dataset(file_path, base_path):
 def get_full_image_path(image_rel_path):
     """Convert relative image path to full path"""
     return os.path.join(st.session_state.base_path, image_rel_path)
+
+def get_existing_images(item):
+    """Get only the images that actually exist on disk"""
+    existing_images = []
+    for img_path in item.get('images', []):
+        full_path = get_full_image_path(img_path)
+        if os.path.exists(full_path):
+            existing_images.append(img_path)
+    return existing_images
 
 def delete_image(item_index, image_index):
     """Delete an image from the dataset"""
@@ -155,10 +174,13 @@ def export_dataset(output_dir):
             export_log.append(f"Skipped: {item.get('listing_id', 'unknown')} - Missing grade or grading company")
             continue
         
+        # Get only existing images
+        existing_images = get_existing_images(item)
+        
         # Skip items without exactly 2 images (front and back)
-        if len(item.get('images', [])) != 2:
+        if len(existing_images) != 2:
             skipped_count += 1
-            export_log.append(f"Skipped: {item.get('listing_id', 'unknown')} - Need exactly 2 images (front/back)")
+            export_log.append(f"Skipped: {item.get('listing_id', 'unknown')} - Need exactly 2 images (front/back), found {len(existing_images)}")
             continue
         
         # Create directory structure: output_dir/grading_company/
@@ -170,7 +192,7 @@ def export_dataset(output_dir):
         
         # Copy and rename images
         try:
-            for idx, image_rel_path in enumerate(item['images']):
+            for idx, image_rel_path in enumerate(existing_images):
                 source_path = get_full_image_path(image_rel_path)
                 if not os.path.exists(source_path):
                     raise FileNotFoundError(f"Image not found: {source_path}")
@@ -265,7 +287,7 @@ if st.session_state.data_loaded:
                      if idx not in st.session_state.deleted_items
                      and item.get('grade') 
                      and item.get('grading_company') 
-                     and len(item.get('images', [])) == 2)
+                     and len(get_existing_images(item)) == 2)
     st.sidebar.metric("Ready to Export", valid_count)
     
     # Info section
@@ -295,7 +317,9 @@ if st.session_state.data_loaded:
     with info_col2:
         st.metric("Listing ID", current_item.get('listing_id', 'N/A'))
     with info_col3:
-        st.metric("Images", len(current_item.get('images', [])))
+        # Show count of existing images only
+        existing_images_count = len(get_existing_images(current_item))
+        st.metric("Images", existing_images_count)
     with info_col4:
         if current_item.get('listing_url'):
             st.markdown(f"[View Listing]({current_item['listing_url']})")
@@ -381,7 +405,8 @@ if st.session_state.data_loaded:
                 st.rerun()
     
     # Image reordering controls
-    if len(current_item.get('images', [])) >= 2:
+    existing_images = get_existing_images(current_item)
+    if len(existing_images) >= 2:
         st.markdown("**Reorder Images:**")
         col_swap1, col_swap2, col_swap3 = st.columns([1, 1, 3])
         with col_swap1:
@@ -390,22 +415,20 @@ if st.session_state.data_loaded:
                 st.success("Swapped!")
                 st.rerun()
         with col_swap2:
-            if len(current_item.get('images', [])) >= 3:
+            if len(existing_images) >= 3:
                 if st.button("🔄 Swap 2↔3", help="Swap second and third image"):
                     swap_images(st.session_state.current_index, 1, 2)
                     st.success("Swapped!")
                     st.rerun()
     
-    images = current_item.get('images', [])
-    
-    if not images:
+    if not existing_images:
         st.warning("No images available for this item")
     else:
         # Display images in columns
-        num_images = len(images)
+        num_images = len(existing_images)
         cols = st.columns(min(num_images, 3))
         
-        for idx, image_rel_path in enumerate(images):
+        for idx, image_rel_path in enumerate(existing_images):
             col_idx = idx % 3
             with cols[col_idx]:
                 image_path = get_full_image_path(image_rel_path)
